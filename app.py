@@ -17,9 +17,9 @@ SYMBOLS = [
 
 # Dedalus (OpenAI-compatible)
 # Base URL documented as https://api.dedaluslabs.ai :contentReference[oaicite:4]{index=4}
-DEDELUS_API_KEY = os.environ.get("DEDELUS_API_KEY", "")
-DEDELUS_BASE_URL = os.environ.get("DEDELUS_BASE_URL", "https://api.dedaluslabs.ai")  # :contentReference[oaicite:5]{index=5}
-DEDELUS_MODEL = os.environ.get("DEDELUS_MODEL", "openai/gpt-4o-mini")  # good default for testing
+DEDALUS_API_KEY = os.environ.get("DEDELUS_API_KEY", "")
+DEDALUS_BASE_URL = os.environ.get("DEDELUS_BASE_URL", "https://api.dedaluslabs.ai")  # :contentReference[oaicite:5]{index=5}
+DEDALUS_MODEL = os.environ.get("DEDELUS_MODEL", "openai/gpt-4o-mini")  # good default for testing
 
 CHAT_COMPLETIONS_URL = f"{DEDELUS_BASE_URL.rstrip('/')}/v1/chat/completions"  # :contentReference[oaicite:6]{index=6}
 
