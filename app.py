@@ -15,12 +15,15 @@ SYMBOLS = [
     "Seed", "Thread", "Candle", "Door", "Bridge", "Cup", "Stone"
 ]
 
-# ---- If you have Dedelus API details, set these on Render as env vars ----
+# Dedalus (OpenAI-compatible)
+# Base URL documented as https://api.dedaluslabs.ai :contentReference[oaicite:4]{index=4}
 DEDELUS_API_KEY = os.environ.get("DEDELUS_API_KEY", "")
-DEDELUS_API_URL = os.environ.get("DEDELUS_API_URL", "")  # e.g. https://api.dedelus.ai/v1/...
-DEDELUS_MODEL = os.environ.get("DEDELUS_MODEL", "")      # optional
+DEDELUS_BASE_URL = os.environ.get("DEDELUS_BASE_URL", "https://api.dedaluslabs.ai")  # :contentReference[oaicite:5]{index=5}
+DEDELUS_MODEL = os.environ.get("DEDELUS_MODEL", "openai/gpt-4o-mini")  # good default for testing
 
-# ---- Simple backend logic: input validation + controlled randomness ----
+CHAT_COMPLETIONS_URL = f"{DEDELUS_BASE_URL.rstrip('/')}/v1/chat/completions"  # :contentReference[oaicite:6]{index=6}
+
+
 def clean_text(s: str) -> str:
     s = (s or "").strip()
     s = re.sub(r"\s+", " ", s)
@@ -29,31 +32,27 @@ def clean_text(s: str) -> str:
 def pick_weighted_mood(user_mood: str) -> str:
     if user_mood in MOODS:
         return user_mood
-    # weighted pick: hopeful a bit more common
     weighted = ["hopeful"] * 4 + ["cryptic"] * 3 + ["playful"] * 3 + ["grounding"] * 2 + ["bold"] * 2
     return random.choice(weighted)
 
-# ---- Fortune generation: tries Dedelus, falls back to local templates ----
+
 def generate_fortune_with_dedelus(question: str, mood: str, symbol: str) -> dict:
-    """
-    NOTE: This function is a template because Dedelus API details can vary.
-    You will likely only need to change:
-    - headers auth format
-    - payload shape
-    - response parsing
-    """
-    if not (DEDELUS_API_KEY and DEDELUS_API_URL):
-        raise RuntimeError("Missing DEDELUS_API_KEY or DEDELUS_API_URL")
+    if not DEDELUS_API_KEY:
+        raise RuntimeError("Missing DEDELUS_API_KEY")
 
     headers = {
-        # Common patterns: "Authorization": f"Bearer {DEDELUS_API_KEY}"
-        # If Dedelus uses something else, swap here.
         "Authorization": f"Bearer {DEDELUS_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
-    prompt = f"""
-You are a digital fortune cookie.
+    system = (
+        "You are a digital fortune cookie. "
+        "Return a short fortune that is mysterious-but-kind. "
+        "No medical/legal/financial instructions. PG-rated. "
+        "Return EXACTLY valid JSON."
+    )
+
+    user_prompt = f"""
 Mood: {mood}
 Symbol: {symbol}
 User question/thought: {question}
@@ -63,44 +62,37 @@ Rules:
 - fortune: 1–2 sentences, max ~35 words, mysterious-but-kind
 - suggestion: 3–10 words, tiny action
 - lucky: a color OR number
-No medical/legal/financial instructions. PG.
 """.strip()
 
-    # Common payload patterns (edit to match Dedelus):
     payload = {
-        "model": DEDELUS_MODEL or "default",
-        "input": prompt,
-        "max_tokens": 120
+        "model": DEDELUS_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.9,
+        "max_tokens": 180,
+        "stream": False
     }
 
-    r = requests.post(DEDELUS_API_URL, headers=headers, json=payload, timeout=20)
+    r = requests.post(CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=20)
     r.raise_for_status()
     data = r.json()
 
-    # Common response patterns: data["output"] or data["text"] or data["choices"][0]["text"]
-    # Try a few likely ones:
-    raw = None
-    if isinstance(data, dict):
-        raw = (
-            data.get("output")
-            or data.get("text")
-            or (data.get("choices", [{}])[0].get("text") if isinstance(data.get("choices"), list) else None)
-        )
+    # OpenAI-compatible: choices[0].message.content :contentReference[oaicite:7]{index=7}
+    content = data["choices"][0]["message"]["content"].strip()
 
-    if not raw or not isinstance(raw, str):
-        raise RuntimeError("Could not parse Dedelus response text")
+    # Expecting JSON string in content
+    parsed = json.loads(content)
 
-    raw = raw.strip()
-    parsed = json.loads(raw)  # must be JSON per our prompt
+    fortune_text = str(parsed.get("fortune", "")).strip() or "A small shift today opens a quiet door tomorrow."
+    suggestion = str(parsed.get("suggestion", "")).strip() or "Take one slow breath."
+    lucky = str(parsed.get("lucky", "")).strip() or "7"
 
-    return {
-        "fortune": str(parsed.get("fortune", "")).strip() or "A small shift today opens a quiet door tomorrow.",
-        "suggestion": str(parsed.get("suggestion", "")).strip() or "Take one slow breath.",
-        "lucky": str(parsed.get("lucky", "")).strip() or "7",
-    }
+    return {"fortune": fortune_text, "suggestion": suggestion, "lucky": lucky}
+
 
 def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
-    # Safe, deterministic-ish templates (so the app still works without Dedelus configured)
     fortunes = {
         "hopeful": [
             "Something light is gathering behind the scenes—stay open to it.",
@@ -137,7 +129,6 @@ def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
     suggestion = random.choice(suggestion_bank)
     lucky = random.choice(lucky_bank)
 
-    # Tiny personalization without AI:
     if question.endswith("?") and mood == "cryptic":
         fortune = fortune + " The question is part of the answer."
 
@@ -163,27 +154,21 @@ def api_fortune():
     mood = pick_weighted_mood(mood_in)
     symbol = random.choice(SYMBOLS)
 
-    # Try Dedelus → fallback if not configured or errors
+    # Try Dedalus → fallback
     try:
-        if DEDELUS_API_KEY and DEDELUS_API_URL:
-            out = generate_fortune_with_dedelus(question, mood, symbol)
-            out.update({"mood": mood, "symbol": symbol, "source": "dedelus"})
-            return jsonify(out)
+        out = generate_fortune_with_dedelus(question, mood, symbol)
+        out.update({"mood": mood, "symbol": symbol, "source": "dedalus"})
+        return jsonify(out)
     except Exception as e:
-        # Still return something usable; include details for debugging
-        fallback = generate_fortune_fallback(question, mood, symbol)
-        fallback.update({
+        fb = generate_fortune_fallback(question, mood, symbol)
+        fb.update({
             "mood": mood,
             "symbol": symbol,
             "source": "fallback",
-            "warning": "Dedelus call failed; returned fallback fortune.",
+            "warning": "Dedalus call failed; returned fallback fortune.",
             "details": str(e)
         })
-        return jsonify(fallback), 200
-
-    fallback = generate_fortune_fallback(question, mood, symbol)
-    fallback.update({"mood": mood, "symbol": symbol, "source": "fallback"})
-    return jsonify(fallback)
+        return jsonify(fb), 200
 
 
 if __name__ == "__main__":
