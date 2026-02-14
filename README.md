@@ -134,3 +134,12 @@ DEDALUS_API_KEY (required)
 DEDALUS_BASE_URL (optional, defaults to https://api.dedaluslabs.ai)
 
 DEDALUS_MODEL (optional, defaults to openai/gpt-4o-mini)
+
+## AI Models used
+Dedalus, base model GPT 4o mini
+
+## Prompt History
+I want to create something where you can enter in text, and a fortune is made using a backend. How would i set this up in render?
+Create the app.py code for me and the neccesary files I need to create this fortune cookie feature
+The front end should be a part of my existing website, how would i implement this? I want it to be a card under my projects so far: "inserted my html for that page for context"
+Give me the updated js code for the feature on my website to call my backend
