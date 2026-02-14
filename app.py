@@ -15,33 +15,47 @@ SYMBOLS = [
     "Seed", "Thread", "Candle", "Door", "Bridge", "Cup", "Stone"
 ]
 
+# -------------------------------------------------------------------
 # Dedalus (OpenAI-compatible)
-# Base URL documented as https://api.dedaluslabs.ai :contentReference[oaicite:4]{index=4}
-DEDALUS_API_KEY = os.environ.get("DEDELUS_API_KEY", "")
-DEDALUS_BASE_URL = os.environ.get("DEDELUS_BASE_URL", "https://api.dedaluslabs.ai")  # :contentReference[oaicite:5]{index=5}
-DEDALUS_MODEL = os.environ.get("DEDELUS_MODEL", "openai/gpt-4o-mini")  # good default for testing
+# -------------------------------------------------------------------
+DEDALUS_API_KEY = os.environ.get("DEDALUS_API_KEY", "")
+DEDALUS_BASE_URL = os.environ.get("DEDALUS_BASE_URL", "https://api.dedaluslabs.ai")
+DEDALUS_MODEL = os.environ.get("DEDALUS_MODEL", "openai/gpt-4o-mini")
 
-CHAT_COMPLETIONS_URL = f"{DEDELUS_BASE_URL.rstrip('/')}/v1/chat/completions"  # :contentReference[oaicite:6]{index=6}
+CHAT_COMPLETIONS_URL = f"{DEDALUS_BASE_URL.rstrip('/')}/v1/chat/completions"
 
 
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
 def clean_text(s: str) -> str:
     s = (s or "").strip()
     s = re.sub(r"\s+", " ", s)
     return s
 
+
 def pick_weighted_mood(user_mood: str) -> str:
     if user_mood in MOODS:
         return user_mood
-    weighted = ["hopeful"] * 4 + ["cryptic"] * 3 + ["playful"] * 3 + ["grounding"] * 2 + ["bold"] * 2
+    weighted = (
+        ["hopeful"] * 4 +
+        ["cryptic"] * 3 +
+        ["playful"] * 3 +
+        ["grounding"] * 2 +
+        ["bold"] * 2
+    )
     return random.choice(weighted)
 
 
-def generate_fortune_with_dedelus(question: str, mood: str, symbol: str) -> dict:
-    if not DEDELUS_API_KEY:
-        raise RuntimeError("Missing DEDELUS_API_KEY")
+# -------------------------------------------------------------------
+# Dedalus call
+# -------------------------------------------------------------------
+def generate_fortune_with_dedalus(question: str, mood: str, symbol: str) -> dict:
+    if not DEDALUS_API_KEY:
+        raise RuntimeError("Missing DEDALUS_API_KEY")
 
     headers = {
-        "Authorization": f"Bearer {DEDELUS_API_KEY}",
+        "Authorization": f"Bearer {DEDALUS_API_KEY}",
         "Content-Type": "application/json",
     }
 
@@ -65,7 +79,7 @@ Rules:
 """.strip()
 
     payload = {
-        "model": DEDELUS_MODEL,
+        "model": DEDALUS_MODEL,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_prompt},
@@ -75,23 +89,35 @@ Rules:
         "stream": False
     }
 
-    r = requests.post(CHAT_COMPLETIONS_URL, headers=headers, json=payload, timeout=20)
+    r = requests.post(
+        CHAT_COMPLETIONS_URL,
+        headers=headers,
+        json=payload,
+        timeout=20
+    )
     r.raise_for_status()
     data = r.json()
 
-    # OpenAI-compatible: choices[0].message.content :contentReference[oaicite:7]{index=7}
+    # OpenAI-compatible response format
     content = data["choices"][0]["message"]["content"].strip()
-
-    # Expecting JSON string in content
     parsed = json.loads(content)
 
-    fortune_text = str(parsed.get("fortune", "")).strip() or "A small shift today opens a quiet door tomorrow."
-    suggestion = str(parsed.get("suggestion", "")).strip() or "Take one slow breath."
+    fortune_text = str(parsed.get("fortune", "")).strip() or \
+        "A small shift today opens a quiet door tomorrow."
+    suggestion = str(parsed.get("suggestion", "")).strip() or \
+        "Take one slow breath."
     lucky = str(parsed.get("lucky", "")).strip() or "7"
 
-    return {"fortune": fortune_text, "suggestion": suggestion, "lucky": lucky}
+    return {
+        "fortune": fortune_text,
+        "suggestion": suggestion,
+        "lucky": lucky,
+    }
 
 
+# -------------------------------------------------------------------
+# Fallback (no API)
+# -------------------------------------------------------------------
 def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
     fortunes = {
         "hopeful": [
@@ -115,6 +141,7 @@ def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
             "Say it plainly. Clarity is your power today.",
         ],
     }
+
     suggestion_bank = [
         "Drink a glass of water.",
         "Write one honest sentence.",
@@ -123,6 +150,7 @@ def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
         "Step outside for 60 seconds.",
         "Do the next tiny task.",
     ]
+
     lucky_bank = ["7", "11", "blue", "green", "13", "gold", "2"]
 
     fortune = random.choice(fortunes.get(mood, fortunes["hopeful"]))
@@ -130,11 +158,18 @@ def generate_fortune_fallback(question: str, mood: str, symbol: str) -> dict:
     lucky = random.choice(lucky_bank)
 
     if question.endswith("?") and mood == "cryptic":
-        fortune = fortune + " The question is part of the answer."
+        fortune += " The question is part of the answer."
 
-    return {"fortune": fortune, "suggestion": suggestion, "lucky": lucky}
+    return {
+        "fortune": fortune,
+        "suggestion": suggestion,
+        "lucky": lucky,
+    }
 
 
+# -------------------------------------------------------------------
+# Routes
+# -------------------------------------------------------------------
 @app.get("/health")
 def health():
     return jsonify({"ok": True})
@@ -154,11 +189,15 @@ def api_fortune():
     mood = pick_weighted_mood(mood_in)
     symbol = random.choice(SYMBOLS)
 
-    # Try Dedalus → fallback
     try:
-        out = generate_fortune_with_dedelus(question, mood, symbol)
-        out.update({"mood": mood, "symbol": symbol, "source": "dedalus"})
+        out = generate_fortune_with_dedalus(question, mood, symbol)
+        out.update({
+            "mood": mood,
+            "symbol": symbol,
+            "source": "dedalus"
+        })
         return jsonify(out)
+
     except Exception as e:
         fb = generate_fortune_fallback(question, mood, symbol)
         fb.update({
