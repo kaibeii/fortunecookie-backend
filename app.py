@@ -60,23 +60,26 @@ def generate_fortune_with_dedalus(question: str, mood: str, symbol: str) -> dict
     }
 
     system = (
-        "You are a digital fortune cookie. "
-        "Return a short fortune that is mysterious-but-kind. "
-        "No medical/legal/financial instructions. PG-rated. "
-        "Return EXACTLY valid JSON."
-    )
+    "You are a digital fortune cookie. "
+    "You must subtly relate the fortune to the user's input without repeating it verbatim. "
+    "No medical/legal/financial advice. PG-rated. "
+    "Return EXACTLY valid JSON."
+)
 
     user_prompt = f"""
-Mood: {mood}
-Symbol: {symbol}
-User question/thought: {question}
+    Mood: {mood}
+    Symbol: {symbol}
+    User input: {question}
 
-Return EXACT JSON with keys: fortune, suggestion, lucky
-Rules:
-- fortune: 1–2 sentences, max ~35 words, mysterious-but-kind
-- suggestion: 3–10 words, tiny action
-- lucky: a color OR number
-""".strip()
+    Return EXACT JSON with keys: fortune, suggestion, lucky
+    Hard requirements:
+    - Fortune must clearly relate to the user's input (use ONE concrete keyword or theme from it).
+    - Do NOT quote the user directly; paraphrase.
+    - fortune: 1–2 sentences, max ~35 words
+    - suggestion: 3–10 words, a tiny action that fits the input
+    - lucky: a color OR number
+    Return ONLY JSON, no extra text.
+    """.strip()
 
     payload = {
         "model": DEDALUS_MODEL,
