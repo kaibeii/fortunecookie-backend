@@ -109,12 +109,15 @@ export DEDALUS_API_KEY="YOUR_KEY_HERE"
 export DEDALUS_BASE_URL="https://api.dedaluslabs.ai"
 export DEDALUS_MODEL="openai/gpt-4o-mini"
 
-Run the server locally:
+Run the server locally: 
+
 
 python app.py
 
+Visit: http://127.0.0.1:5000/health
 
-### Authentication and Secrets
+
+## Authentication and Secrets
 
 This project uses an API key to access the Dedalus API.
 
